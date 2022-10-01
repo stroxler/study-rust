@@ -1,0 +1,7 @@
+[package]
+name = "stroxler_rust_starter"
+version = "0.0.0.0"
+repository = "https://github.com/stroxler/study-rust"o
+edition = "2022"
+
+[dependencies]
