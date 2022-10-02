@@ -63,6 +63,13 @@ was actually nice to see how clear the error was.
 I had forgotten how to work with a boxed value - just dereference it using the unary
 `*` operator (same as working with a pointer in C, except it's memory- and type-safe).
 
+It's worth noting that the semantics of unary `*` are mostly determined by a Deref
+trait that other types (like Rc) can implement, but the compiler hardcodes special
+cases for `Box` that work specifically because we know a `Box` is, at runtime, just
+a raw pointer. See
+[this stack overflow thread](https://stackoverflow.com/questions/33653946/dereferencing-boxt-gives-back-value-instead-of-reference)
+for some discussion.
+
 ## Parser Lessons Learned
 
 **Use bottoms-up development**
