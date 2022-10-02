@@ -1,5 +1,6 @@
 use std::env::args;
 use std::io::{BufRead, Write};
+use std::rc::Rc;
 
 pub fn main() {
     let args: Vec<String> = args().collect();
@@ -31,11 +32,13 @@ fn run_repl() -> Result<(), String> {
     for line in stdin.lock().lines() {
         match line {
             Ok(code) => {
-                let ast = get_ast(code)?;
-                println!("AST: {:?}", ast);
+                match get_expression(code) {
+                    Ok(expression) => println!("Expression: {:?}", expression),
+                    Err(message) => println!("Syntax Error: {:?}", message),
+                }
             },
-            Err(_) => {
-                break;
+            Err(err) => {
+                println!("Error reading stdin: {:?}", err);
             }
         }
         prompt_and_flush();
@@ -44,10 +47,10 @@ fn run_repl() -> Result<(), String> {
 }
 
 
-fn get_ast(code: String) -> Result<Ast, String> {
+fn get_expression(code: String) -> Result<Rc<Expression>, String> {
     let tokens = lex_code(code)?;
-    let ast = parse_code(tokens)?;
-    Ok(ast)
+    let expression = parse_code(tokens)?;
+    Ok(expression)
 }
 
 
@@ -95,7 +98,7 @@ impl Lexer {
             ')' => self.add_symbol(TokenKind::RightParen, c),
             '+' => self.add_symbol(TokenKind::Plus, c),
             '-' => self.add_symbol(TokenKind::Minus, c),
-            '*' => self.add_symbol(TokenKind::Multiply, c),
+            '*' => self.add_symbol(TokenKind::Star, c),
             '0'..='9' => self.scan_number(c),
             ' ' => self.scan_token(),
             _ => Err(format!("Unexpected character '{}' at position {}", c, self.current))
@@ -227,14 +230,12 @@ impl Token {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum TokenKind {
     Number,
-    Identifier,
-    Assign,
     Plus,
     Minus,
-    Multiply,
+    Star,
     LeftParen,
     RightParen,
     Eof,
@@ -242,13 +243,127 @@ pub enum TokenKind {
 
 /*** PARSING ***/
 
-fn parse_code(tokens: Vec<Token>) -> Result<Ast, String> {
-    Ok(Ast {tokens})
+fn parse_code(tokens: Vec<Token>) -> Result<Rc<Expression>, String> {
+    let mut parser = Parser::new(tokens);
+    parser.parse()
+}
+
+
+pub struct Parser {
+    tokens: Vec<Token>,
+    current: usize,
+}
+
+impl Parser {
+
+    pub fn new(tokens: Vec<Token>) -> Parser {
+        Parser {
+            tokens,
+            current: 0,
+        }
+    }
+
+    pub fn parse(&mut self) -> Result<Rc<Expression>, String> {
+        self.term()
+    }
+
+    fn term(&mut self) -> Result<Rc<Expression>, String> {
+        let mut expression = self.product()?;
+        let mut finished = false;
+        while !finished {
+            let tk = self.peek().kind;
+            match tk {
+                TokenKind::Plus => {
+                    self.consume();
+                    let right = self.product()?;
+                    expression = Rc::new(Expression::Sum(expression, right));
+                },
+                TokenKind::Minus => {
+                    self.consume();
+                    let right = self.product()?;
+                    expression = Rc::new(Expression::Difference(expression, right));
+                },
+                _ => finished = true,
+            }
+        }
+        Ok(expression)
+    }
+
+    fn product(&mut self) -> Result<Rc<Expression>, String> {
+        let mut expression = self.parenthesized()?;
+        let mut finished = false;
+        while !finished {
+            let tk = self.peek().kind;
+            match tk {
+                TokenKind::Star => {
+                    self.consume();
+                    let right = self.parenthesized()?;
+                    expression = Rc::new(Expression::Product(expression, right));
+                },
+                _ => finished = true,
+            }
+        };
+        Ok(expression)
+    }
+
+    fn parenthesized(&mut self) -> Result<Rc<Expression>, String> {
+        let t = self.peek();
+        match t.kind {
+            TokenKind::LeftParen => {
+                self.consume();
+                let inner = self.parse()?;
+                let t = self.advance();
+                match t.kind {
+                    TokenKind::Eof => Err(format!("Unexpected end of input: {:?}", t)),
+                    TokenKind::RightParen => Ok(inner),
+                    _ => Err(format!("Unexpected token: {:?}", t)),
+                }
+            },
+            _ => self.number()
+        }
+    }
+
+    fn number(&mut self) -> Result<Rc<Expression>, String> {
+        let t = self.advance();
+        match t.kind {
+            TokenKind::Eof => Err(format!("Unexpected end of input: {:?}", t)),
+            TokenKind::Number => {
+                if let Some(number) = t.literal {
+                    Ok(Rc::new(Expression::Number(number)))
+                } else {
+                    Err(format!("Unexpected number token with no number {:?} (lexer bug!)", t))
+                }
+            },
+            _ => Err(format!("Could not parse token: {:?}", t)),
+        }
+
+    }
+
+    fn advance(&mut self) -> &Token {
+        let t = self.tokens.get(self.current).unwrap();
+        self.current += 1;
+        t
+    }
+
+    fn peek(&mut self) -> &Token {
+        self.tokens.get(self.current).unwrap()
+    }
+
+    fn consume(&mut self) -> () {
+        self.current += 1;
+        if self.current >= self.tokens.len() {
+            panic!("We consumed the last token! Missed a check for Eof");
+        }
+    }
+
 }
 
 
 
 #[derive(Debug)]
-pub struct Ast {
-    tokens: Vec<Token>
+pub enum Expression {
+    Number(f64),
+    Sum(Rc<Expression>, Rc<Expression>),
+    Difference(Rc<Expression>, Rc<Expression>),
+    Product(Rc<Expression>, Rc<Expression>),
 }
