@@ -60,6 +60,9 @@ Recursive data always needs some kind of boxing; Rust immediately flagged my Exp
 type as illegal when I had unboxed Expressions inside. This wasn't a surprise, but it
 was actually nice to see how clear the error was.
 
+I had forgotten how to work with a boxed value - just dereference it using the unary
+`*` operator (same as working with a pointer in C, except it's memory- and type-safe).
+
 ## Parser Lessons Learned
 
 **Use bottoms-up development**

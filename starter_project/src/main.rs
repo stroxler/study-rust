@@ -1,6 +1,5 @@
 use std::env::args;
 use std::io::{BufRead, Write};
-use std::rc::Rc;
 
 pub fn main() {
     let args: Vec<String> = args().collect();
@@ -21,7 +20,7 @@ pub fn main() {
 
 
 fn prompt_and_flush() -> () {
-    print!("calculator> ");
+    print!("calc >> ");
     let _ = std::io::stdout().flush();
 }
 
@@ -33,7 +32,10 @@ fn run_repl() -> Result<(), String> {
         match line {
             Ok(code) => {
                 match get_expression(code) {
-                    Ok(expression) => println!("Expression: {:?}", expression),
+                    Ok(expression) => {
+                        println!("Expression: {:?}", expression);
+                        println!("Result: {:?}", interpret(expression));
+                    },
                     Err(message) => println!("Syntax Error: {:?}", message),
                 }
             },
@@ -47,7 +49,7 @@ fn run_repl() -> Result<(), String> {
 }
 
 
-fn get_expression(code: String) -> Result<Rc<Expression>, String> {
+fn get_expression(code: String) -> Result<Box<Expression>, String> {
     let tokens = lex_code(code)?;
     let expression = parse_code(tokens)?;
     Ok(expression)
@@ -243,7 +245,7 @@ pub enum TokenKind {
 
 /*** PARSING ***/
 
-fn parse_code(tokens: Vec<Token>) -> Result<Rc<Expression>, String> {
+fn parse_code(tokens: Vec<Token>) -> Result<Box<Expression>, String> {
     let mut parser = Parser::new(tokens);
     parser.parse()
 }
@@ -263,11 +265,11 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Rc<Expression>, String> {
+    pub fn parse(&mut self) -> Result<Box<Expression>, String> {
         self.term()
     }
 
-    fn term(&mut self) -> Result<Rc<Expression>, String> {
+    fn term(&mut self) -> Result<Box<Expression>, String> {
         let mut expression = self.product()?;
         let mut finished = false;
         while !finished {
@@ -276,12 +278,12 @@ impl Parser {
                 TokenKind::Plus => {
                     self.consume();
                     let right = self.product()?;
-                    expression = Rc::new(Expression::Sum(expression, right));
+                    expression = Box::new(Expression::Sum(expression, right));
                 },
                 TokenKind::Minus => {
                     self.consume();
                     let right = self.product()?;
-                    expression = Rc::new(Expression::Difference(expression, right));
+                    expression = Box::new(Expression::Difference(expression, right));
                 },
                 _ => finished = true,
             }
@@ -289,7 +291,7 @@ impl Parser {
         Ok(expression)
     }
 
-    fn product(&mut self) -> Result<Rc<Expression>, String> {
+    fn product(&mut self) -> Result<Box<Expression>, String> {
         let mut expression = self.parenthesized()?;
         let mut finished = false;
         while !finished {
@@ -298,7 +300,7 @@ impl Parser {
                 TokenKind::Star => {
                     self.consume();
                     let right = self.parenthesized()?;
-                    expression = Rc::new(Expression::Product(expression, right));
+                    expression = Box::new(Expression::Product(expression, right));
                 },
                 _ => finished = true,
             }
@@ -306,7 +308,7 @@ impl Parser {
         Ok(expression)
     }
 
-    fn parenthesized(&mut self) -> Result<Rc<Expression>, String> {
+    fn parenthesized(&mut self) -> Result<Box<Expression>, String> {
         let t = self.peek();
         match t.kind {
             TokenKind::LeftParen => {
@@ -323,13 +325,13 @@ impl Parser {
         }
     }
 
-    fn number(&mut self) -> Result<Rc<Expression>, String> {
+    fn number(&mut self) -> Result<Box<Expression>, String> {
         let t = self.advance();
         match t.kind {
             TokenKind::Eof => Err(format!("Unexpected end of input: {:?}", t)),
             TokenKind::Number => {
                 if let Some(number) = t.literal {
-                    Ok(Rc::new(Expression::Number(number)))
+                    Ok(Box::new(Expression::Number(number)))
                 } else {
                     Err(format!("Unexpected number token with no number {:?} (lexer bug!)", t))
                 }
@@ -363,7 +365,21 @@ impl Parser {
 #[derive(Debug)]
 pub enum Expression {
     Number(f64),
-    Sum(Rc<Expression>, Rc<Expression>),
-    Difference(Rc<Expression>, Rc<Expression>),
-    Product(Rc<Expression>, Rc<Expression>),
+    Sum(Box<Expression>, Box<Expression>),
+    Difference(Box<Expression>, Box<Expression>),
+    Product(Box<Expression>, Box<Expression>),
+}
+
+
+
+/*** Interpreter ***/
+
+
+fn interpret(expression: Box<Expression>) -> f64 {
+    match *expression {
+        Expression::Number(number) => number,
+        Expression::Sum(left, right) => interpret(left) + interpret(right),
+        Expression::Difference(left, right) => interpret(left) - interpret(right),
+        Expression::Product(left, right) => interpret(left) * interpret(right),
+    }
 }
