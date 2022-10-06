@@ -34,7 +34,10 @@ fn run_repl() -> Result<(), String> {
                 match get_expression(code) {
                     Ok(expression) => {
                         println!("Expression: {:?}", expression);
-                        println!("Result: {:?}", interpret(expression));
+                        let stack_ops = compile(&expression);
+                        println!("Stack Representation: {:?}", stack_ops);
+                        println!("Ast Interpreter Result: {:?}", interpret(&expression));
+                        println!("Stack Machine Result: {:?}", run_stack(stack_ops));
                     },
                     Err(message) => println!("Syntax Error: {:?}", message),
                 }
@@ -375,11 +378,73 @@ pub enum Expression {
 /*** Interpreter ***/
 
 
-fn interpret(expression: Box<Expression>) -> f64 {
-    match *expression {
+fn interpret(expression: &Box<Expression>) -> f64 {
+    match **expression {
         Expression::Number(number) => number,
-        Expression::Sum(left, right) => interpret(left) + interpret(right),
-        Expression::Difference(left, right) => interpret(left) - interpret(right),
-        Expression::Product(left, right) => interpret(left) * interpret(right),
+        Expression::Sum(ref left, ref right) => interpret(&left) + interpret(&right),
+        Expression::Difference(ref left, ref right) => interpret(&left) - interpret(&right),
+        Expression::Product(ref left, ref right) => interpret(&left) * interpret(&right),
     }
+}
+
+
+/*** Stack Machine ***/
+
+#[derive(Debug)]
+enum StackOp {
+    Push(f64),
+    Add,
+    Subtract,
+    Multiply,
+}
+
+fn compile_binary(left: &Box<Expression>, op: StackOp, right:&Box<Expression>) -> Vec<StackOp> {
+    let mut out = compile(left);
+    out.append(&mut compile(right));
+    out.push(op);
+    out
+}
+
+fn compile(expression: &Box<Expression>) -> Vec<StackOp> {
+    match **expression {
+        Expression::Number(number) => vec![StackOp::Push(number)],
+        Expression::Sum(ref left, ref right) => {
+            compile_binary(left, StackOp::Add, right)
+        },
+        Expression::Difference(ref left, ref right) => {
+            compile_binary(left, StackOp::Subtract, right)
+        },
+        Expression::Product(ref left, ref right) => {
+            compile_binary(left, StackOp::Multiply, right)
+        },
+    }
+}
+
+fn run_stack(ops: Vec<StackOp>) -> Vec<f64> {
+    let mut stack = Vec::new();
+
+    fn apply_to_top_of_stack<F>(stack: &mut Vec<f64>, f: F)
+    where F: Fn(f64, f64) -> f64 {
+        let right = stack.pop().unwrap();
+        let left = stack.pop().unwrap();
+        stack.push(f(left, right))
+    }
+
+    for op in ops.iter() {
+        match *op {
+            StackOp::Push(number) => {
+                stack.push(number);
+            },
+            StackOp::Add => {
+                apply_to_top_of_stack(&mut stack, |left, right| left + right);
+            },
+            StackOp::Subtract => {
+                apply_to_top_of_stack(&mut stack, |left, right| left - right);
+            },
+            StackOp::Multiply => {
+                apply_to_top_of_stack(&mut stack, |left, right| left * right);
+            },
+        }
+    };
+    stack
 }
