@@ -4,14 +4,11 @@ mod Lex {
     #[derive(Debug)]
     pub enum TokenType {
         Character(char),
-        LeftBracket,
-        RightBracket,
         LeftParen,
         RightParen,
         Pipe,
         Dot,
         Star,
-        Not,
         Eof,
         // I'm not implementing features that can easily
         // be achieved via preprocessing such as: +, ?, ranges
@@ -20,7 +17,7 @@ mod Lex {
     /* Normally a token would include start and end positions and the actual
      * lexeme. But the regular expression grammar is so simple (each token is
      * one or two characters) that we can get away without this, which simplifies
-     * our code a bit and makes the essential behavior of lexing clearer.
+     * the code a bit
      */
     #[derive(Debug)]
     pub struct Token {
@@ -94,12 +91,6 @@ mod Lex {
                     '|' => {
                         self.add_token(TokenType::Pipe)
                     }
-                    '[' => {
-                        self.add_token(TokenType::LeftBracket)
-                    },
-                    ']' => {
-                        self.add_token(TokenType::RightBracket)
-                    },
                     '(' => {
                         self.add_token(TokenType::LeftParen)
                     },
@@ -125,7 +116,6 @@ mod Lex {
         Ok(lexer.tokens)
     }
 
-
 }
 
 
@@ -134,7 +124,7 @@ fn main() {
         // Good examples
         r"a",
         r"a*.(bc|d)",
-        r"(\\\[\|\.\a\b\])",
+        r"(\\\(\|\.\a\b\))",
         // Bad examples
         r"a\",
     ];
