@@ -1,29 +1,33 @@
 
+
+#[derive(Debug)]
+pub enum TokenType {
+    Character(char),
+    LeftParen,
+    RightParen,
+    Pipe,
+    Dot,
+    Star,
+    Eof,
+    // I'm not implementing features that can easily
+    // be achieved via preprocessing such as: +, ?, ranges
+}
+
+/* Normally a token would include start and end positions and the actual
+    * lexeme. But the regular expression grammar is so simple (each token is
+    * one or two characters) that we can get away without this, which simplifies
+    * the code a bit
+    */
+#[derive(Debug)]
+pub struct Token {
+    position: usize,
+    tt: TokenType,
+}
+
 mod Lex {
 
-    #[derive(Debug)]
-    pub enum TokenType {
-        Character(char),
-        LeftParen,
-        RightParen,
-        Pipe,
-        Dot,
-        Star,
-        Eof,
-        // I'm not implementing features that can easily
-        // be achieved via preprocessing such as: +, ?, ranges
-    }
-
-    /* Normally a token would include start and end positions and the actual
-     * lexeme. But the regular expression grammar is so simple (each token is
-     * one or two characters) that we can get away without this, which simplifies
-     * the code a bit
-     */
-    #[derive(Debug)]
-    pub struct Token {
-        position: usize,
-        tt: TokenType,
-    }
+    type Token = crate::Token;
+    type TokenType = crate::TokenType;
 
     pub struct Lexer {
         chars: Vec<char>,
@@ -69,7 +73,7 @@ mod Lex {
         }
 
         pub fn lex(&mut self) -> Result<(), String> {
-            while (!self.reached_end()) {
+            while !self.reached_end() {
                 let c = self.advance();
                 match c {
                     '\\' => {
@@ -114,6 +118,50 @@ mod Lex {
         let mut lexer = Lexer::new(code);
         lexer.lex()?;
         Ok(lexer.tokens)
+    }
+
+}
+
+mod Parse {
+
+    use crate::Token;
+    use crate::TokenType;
+
+    pub enum Regex {
+        Character(char),
+        Dot,
+        Starred(Box<Regex>),
+        Sequence(Vec<Regex>),
+        Or(Vec<Regex>),
+    }
+
+    pub struct Parser {
+        tokens: Vec<Token>,
+        current: usize,
+    }
+
+    impl Parser {
+        pub fn new(tokens: Vec<Token>) -> Parser {
+            Parser {
+                tokens,
+                current: 0
+            }
+        }
+
+        pub fn peek(&self) -> Option<&Token> {
+            self.tokens.get(self.current)
+        }
+
+        pub fn consume(&mut self) -> () {
+            self.current += 1
+        }
+
+        pub fn advance(&mut self) -> &Token {
+            let out = self.tokens.get(self.current).unwrap();
+            self.current += 1;
+            out
+        }
+
     }
 
 }
